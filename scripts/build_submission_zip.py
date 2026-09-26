@@ -19,6 +19,7 @@ from pathlib import Path
 import shutil
 import sys
 import tempfile
+from typing import Optional
 import zipfile
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -31,6 +32,7 @@ from utils.validate_submission import validate_submission
 def build_submission_zip(
     team_name: str = "DocGuru",
     output_dir: Path = PROJECT_ROOT,
+    test_dir: Optional[Path] = None,
 ) -> Path:
     """
     Build the submission ZIP archive from the current project repository.
@@ -38,6 +40,7 @@ def build_submission_zip(
     Args:
         team_name: Identifier for the team submission filename.
         output_dir: Directory where the zip file will be written.
+        test_dir: Directory containing test source TSV files for validation.
 
     Returns:
         Path to the created ZIP file.
@@ -112,13 +115,20 @@ def build_submission_zip(
 
         unzipped_matching = temp_path / "output" / "matching_results.tsv"
         unzipped_candidate = temp_path / "output" / "candidate_pairs.tsv"
-        test_dir = PROJECT_ROOT / "dataset" / "test"
+        if test_dir is None:
+            official_test = PROJECT_ROOT / "dataset_official" / "test"
+            if official_test.is_dir() and unzipped_matching.stat().st_size > 100000:
+                val_test_dir = official_test
+            else:
+                val_test_dir = PROJECT_ROOT / "dataset" / "test"
+        else:
+            val_test_dir = test_dir
 
         # Run validator
         validate_submission(
             matching_path=unzipped_matching,
             candidate_path=unzipped_candidate,
-            test_dir=test_dir,
+            test_dir=val_test_dir,
         )
 
     print("=" * 70)

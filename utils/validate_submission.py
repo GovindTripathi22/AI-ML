@@ -56,14 +56,17 @@ def validate_submission(
             raise FileNotFoundError(f"Required test file not found: {f}")
 
     # 2. Load ground test sets
-    s1_df = pd.read_csv(s1_file, sep="\t", dtype=str, keep_default_na=False)
-    s2_df = pd.read_csv(s2_file, sep="\t", dtype=str, keep_default_na=False)
-    s3_df = pd.read_csv(s3_file, sep="\t", dtype=str, keep_default_na=False)
+    s1_df = pd.read_csv(s1_file, sep="\t", dtype=str, usecols=["entity_id"], keep_default_na=False)
+    s2_df = pd.read_csv(s2_file, sep="\t", dtype=str, usecols=["entity_id"], keep_default_na=False)
+    s3_df = pd.read_csv(s3_file, sep="\t", dtype=str, usecols=["entity_id"], keep_default_na=False)
 
     s1_expected_ids = s1_df["entity_id"].str.strip().tolist()
     s2_ids: Set[str] = set(s2_df["entity_id"].str.strip())
     s3_ids: Set[str] = set(s3_df["entity_id"].str.strip())
     valid_target_ids = s2_ids | s3_ids
+
+    # Free memory
+    del s1_df, s2_df, s3_df
 
     print(f"Loaded test entities: {len(s1_expected_ids)} S1, {len(s2_ids)} S2, {len(s3_ids)} S3")
 
@@ -121,15 +124,15 @@ def validate_submission(
     if len(cand_s1_ids) != len(set(cand_s1_ids)):
         raise ValueError(f"Duplicate source1_entity_id rows found in {candidate_path.name}")
 
-    # Build entity lookups
-    match_dict = {
-        row["source1_entity_id"].strip(): parse_id_list(row["matched_entity_ids"])
-        for _, row in match_df.iterrows()
-    }
-    cand_dict = {
-        row["source1_entity_id"].strip(): parse_id_list(row["candidate_entity_ids"])
-        for _, row in cand_df.iterrows()
-    }
+    # Build entity lookups fast without iterrows
+    match_dict = dict(zip(
+        match_df["source1_entity_id"].str.strip(),
+        [parse_id_list(x) for x in match_df["matched_entity_ids"]]
+    ))
+    cand_dict = dict(zip(
+        cand_df["source1_entity_id"].str.strip(),
+        [parse_id_list(x) for x in cand_df["candidate_entity_ids"]]
+    ))
 
     # 6. Detailed entity-level consistency checks
     for s1_id in s1_expected_ids:
