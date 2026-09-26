@@ -32,6 +32,7 @@ from sklearn.metrics import (
     recall_score,
     roc_auc_score,
 )
+from sklearn.model_selection import StratifiedGroupKFold
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
@@ -42,6 +43,50 @@ from src.utils.data_loader import load_training_data
 
 MODELS_SAVED_DIR = PROJECT_ROOT / "src" / "models" / "saved"
 NOTEBOOKS_DIR = PROJECT_ROOT / "notebooks"
+
+
+class EnsembleMatcher:
+    """
+    K-Fold Cross-Validation Ensemble Model.
+    Averages predicted probabilities across all fold models for robust inference.
+    """
+
+    def __init__(self, models: List[Any], feature_names: List[str]):
+        self.models = models
+        self.feature_names = feature_names
+        self.classes_ = np.array([0, 1])
+
+    def predict_proba(self, X: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
+        if isinstance(X, pd.DataFrame):
+            X_in = X[self.feature_names]
+        else:
+            X_in = X
+        probs = np.zeros((len(X_in), 2), dtype=float)
+        for model in self.models:
+            probs += model.predict_proba(X_in)
+        return probs / len(self.models)
+
+    def predict(self, X: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
+        probs = self.predict_proba(X)[:, 1]
+        return (probs >= 0.5).astype(int)
+
+    @property
+    def feature_importances_(self) -> np.ndarray:
+        """Mean feature importances across all fold models."""
+        total = np.zeros(len(self.feature_names), dtype=float)
+        count = 0
+        for m in self.models:
+            if hasattr(m, "feature_importances_"):
+                total += m.feature_importances_
+                count += 1
+        return (total / count) if count > 0 else total
+
+    @property
+    def booster_(self):
+        """Access booster from fold 0 for LightGBM compatibility."""
+        if self.models and hasattr(self.models[0], "booster_"):
+            return self.models[0].booster_
+        raise AttributeError("No underlying booster available.")
 
 
 def load_or_create_train_val_data(
@@ -168,6 +213,82 @@ def train_lightgbm(
     )
 
     return clf
+
+
+def train_cv_ensemble(
+    df: pd.DataFrame,
+    n_splits: int = 5,
+    random_state: int = RANDOM_SEED,
+) -> Tuple[EnsembleMatcher, pd.DataFrame, Dict[str, Any]]:
+    """
+    Train a 5-Fold StratifiedGroupKFold LightGBM ensemble.
+    Guarantees 0% entity leakage across folds.
+
+    Args:
+        df: Full labeled dataset DataFrame.
+        n_splits: Number of cross-validation folds (default: 5).
+        random_state: Random state seed.
+
+    Returns:
+        Tuple: (fitted EnsembleMatcher, out-of-fold predictions DataFrame, CV summary dict)
+    """
+    meta_cols = ["source1_entity_id", "candidate_id", "label", "split"]
+    feature_cols = [c for c in df.columns if c not in meta_cols]
+
+    X = df[feature_cols].copy()
+    y = df["label"].astype(int).copy()
+    groups = df["source1_entity_id"].copy()
+
+    # StratifiedGroupKFold groups strictly by Source 1 entity
+    cv = StratifiedGroupKFold(n_splits=n_splits, shuffle=True, random_state=random_state)
+
+    oof_probs = np.zeros(len(df), dtype=float)
+    fold_models: List[lgb.LGBMClassifier] = []
+    fold_metrics: List[Dict[str, Any]] = []
+
+    for fold, (train_idx, val_idx) in enumerate(cv.split(X, y, groups=groups)):
+        X_tr, y_tr = X.iloc[train_idx], y.iloc[train_idx]
+        X_v, y_v = X.iloc[val_idx], y.iloc[val_idx]
+
+        model = train_lightgbm(
+            X_tr,
+            y_tr,
+            X_v,
+            y_v,
+            n_estimators=500,
+            learning_rate=0.03,
+            max_depth=6,
+            num_leaves=31,
+            early_stopping_rounds=30,
+            random_state=random_state + fold,
+        )
+        fold_models.append(model)
+
+        val_probs = model.predict_proba(X_v)[:, 1]
+        oof_probs[val_idx] = val_probs
+
+        metrics = evaluate_model(model, X_v, y_v, threshold=0.5)
+        fold_metrics.append(metrics)
+
+    ensemble = EnsembleMatcher(fold_models, feature_names=feature_cols)
+
+    oof_df = df[["source1_entity_id", "candidate_id", "label"]].copy()
+    oof_df["oof_prob"] = oof_probs
+
+    y_all = y.values
+    oof_roc = float(roc_auc_score(y_all, oof_probs)) if len(np.unique(y_all)) > 1 else 0.0
+    oof_pr = float(average_precision_score(y_all, oof_probs)) if len(np.unique(y_all)) > 1 else 0.0
+
+    cv_summary = {
+        "n_splits": n_splits,
+        "oof_roc_auc": round(oof_roc, 5),
+        "oof_pr_auc": round(oof_pr, 5),
+        "fold_metrics": fold_metrics,
+        "mean_fold_pr_auc": round(float(np.mean([m["pr_auc"] for m in fold_metrics])), 5),
+        "mean_fold_f1": round(float(np.mean([m["f1_score"] for m in fold_metrics])), 5),
+    }
+
+    return ensemble, oof_df, cv_summary
 
 
 def train_logistic_regression(
@@ -524,14 +645,35 @@ def run_training_pipeline(
             best_model = lr_model
             better_msg = "Logistic Regression selected based on higher F1 score."
 
+    # 5. Train 5-Fold StratifiedGroupKFold LightGBM Ensemble
+    print("\nTraining 5-Fold StratifiedGroupKFold LightGBM Ensemble...")
+    t0 = time.time()
+    full_labeled_df = load_labeled_parquet()
+    ensemble_model, oof_df, cv_metrics = train_cv_ensemble(
+        full_labeled_df, n_splits=5, random_state=RANDOM_SEED
+    )
+    cv_time = time.time() - t0
+    print(f"  5-Fold Ensemble trained in {cv_time:.2f}s (OOF PR-AUC: {cv_metrics['oof_pr_auc']:.4f}, OOF ROC-AUC: {cv_metrics['oof_roc_auc']:.4f})")
+
+    all_metrics["cv_ensemble"] = {
+        **cv_metrics,
+        "training_time_sec": round(cv_time, 3),
+    }
+
+    # If LightGBM won the validation comparison, use the 5-Fold Ensemble as the production model
+    if best_name == "lightgbm":
+        best_model = ensemble_model
+        best_name = "lightgbm_cv_ensemble"
+        better_msg += " Upgraded to 5-Fold StratifiedGroupKFold ensemble for reduced variance and robust out-of-fold generalization."
+
     print(f"\nWinning Model: {best_name.upper()}")
     print(f"Reason: {better_msg}")
 
-    # 5. Plot Feature Importance
+    # 6. Plot Feature Importance
     plot_path = plot_feature_importance(lgb_model, feature_names, top_n=15)
     print(f"\nFeature importance plot saved to: {plot_path}")
 
-    # 6. Save Model and Training Log
+    # 7. Save Model and Training Log
     model_path, log_path = save_artifacts(
         best_model=best_model,
         best_model_name=best_name,

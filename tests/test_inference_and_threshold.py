@@ -23,6 +23,7 @@ from src.models.threshold_tuning import (
     macro_average_metrics,
 )
 from src.pipeline.run_inference import (
+    apply_graph_and_relative_filtering,
     validate_inference_outputs,
     write_submission_tsv,
 )
@@ -205,3 +206,52 @@ def test_build_submission_zip_contents():
             assert "code/business_entity_resolution/requirements.txt" in names
             assert "Documentation_template.md" in names
             assert any(n.startswith("code/business_entity_resolution/src/") for n in names)
+
+
+def test_apply_graph_and_relative_filtering():
+    """Test entity-relative margin filtering and transitive link recovery."""
+    s1_order = ["S1-01", "S1-02", "S1-03"]
+    s2_df = pd.DataFrame([
+        {"entity_id": "S2-01", "business_name_norm": "acme corporation", "business_address_norm": "10 main st", "country": "US"},
+        {"entity_id": "S2-02", "business_name_norm": "beta corp", "business_address_norm": "20 oak st", "country": "US"},
+    ])
+    s3_df = pd.DataFrame([
+        {"entity_id": "S3-01", "business_name_norm": "acme corp", "business_address_norm": "10 main street", "country": "US"},
+        {"entity_id": "S3-02", "business_name_norm": "gamma industries", "business_address_norm": "30 pine st", "country": "US"},
+    ])
+
+    cand_pairs = {
+        "S1-01": ["S2-01", "S3-01"],
+        "S1-02": ["S2-02", "S3-02"],
+        "S1-03": ["S2-01"],
+    }
+
+    # Case 1: S1-01 has S2-01 high (0.92) and S3-01 borderline (0.50).
+    # Since S2-01 and S3-01 are "acme corporation" vs "acme corp" (very high similarity),
+    # transitive link recovery should recover S3-01!
+    cand_probs = pd.DataFrame([
+        {"source1_entity_id": "S1-01", "candidate_id": "S2-01", "match_probability": 0.92},
+        {"source1_entity_id": "S1-01", "candidate_id": "S3-01", "match_probability": 0.50},
+        # Case 2: S1-02 has S2-02 high (0.90) and S3-02 with low prob (0.20) and unrelated name -> rejected
+        {"source1_entity_id": "S1-02", "candidate_id": "S2-02", "match_probability": 0.90},
+        {"source1_entity_id": "S1-02", "candidate_id": "S3-02", "match_probability": 0.20},
+        # Case 3: S1-03 has low probability (0.30) -> singleton (empty matches)
+        {"source1_entity_id": "S1-03", "candidate_id": "S2-01", "match_probability": 0.30},
+    ])
+
+    results = apply_graph_and_relative_filtering(
+        cand_probs_df=cand_probs,
+        source1_order=s1_order,
+        source2_df=s2_df,
+        source3_df=s3_df,
+        candidate_pairs=cand_pairs,
+        base_threshold=0.60,
+        margin_ratio=0.70,
+        enable_transitive_recovery=True,
+        borderline_threshold=0.45,
+    )
+
+    assert "S2-01" in results["S1-01"]
+    assert "S3-01" in results["S1-01"]  # Transitive recovery
+    assert results["S1-02"] == ["S2-02"]
+    assert results["S1-03"] == []  # Singleton

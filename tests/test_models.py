@@ -25,9 +25,11 @@ from src.models.labeling import (
     split_by_entity,
 )
 from src.models.train_matcher import (
+    EnsembleMatcher,
     evaluate_model,
     plot_feature_importance,
     save_artifacts,
+    train_cv_ensemble,
     train_lightgbm,
     train_logistic_regression,
 )
@@ -223,3 +225,37 @@ def test_save_artifacts_roundtrip():
             log_dict = json.load(f)
         assert log_dict["best_model"] == "model_a"
         assert "models_evaluated" in log_dict
+
+
+def test_ensemble_matcher_and_cv(sample_candidate_pairs, sample_ground_truth):
+    """Test 5-Fold StratifiedGroupKFold ensemble training and prediction."""
+    labeled = assign_labels(sample_candidate_pairs, sample_ground_truth)
+    # Add dummy split column
+    labeled["split"] = "train"
+
+    # Train CV ensemble with 3 folds for test speed
+    ensemble, oof_df, cv_summary = train_cv_ensemble(labeled, n_splits=3, random_state=42)
+
+    assert isinstance(ensemble, EnsembleMatcher)
+    assert len(ensemble.models) == 3
+    assert len(oof_df) == len(labeled)
+    assert "oof_prob" in oof_df.columns
+    assert cv_summary["n_splits"] == 3
+    assert "oof_roc_auc" in cv_summary
+    assert "oof_pr_auc" in cv_summary
+
+    # Test ensemble predict_proba
+    feature_cols = [c for c in labeled.columns if c not in ["source1_entity_id", "candidate_id", "label", "split"]]
+    probs = ensemble.predict_proba(labeled[feature_cols])
+    assert probs.shape == (len(labeled), 2)
+    assert np.all(probs >= 0.0) and np.all(probs <= 1.0)
+    assert np.allclose(probs.sum(axis=1), 1.0)
+
+    # Test ensemble predict
+    preds = ensemble.predict(labeled[feature_cols])
+    assert len(preds) == len(labeled)
+    assert set(np.unique(preds)).issubset({0, 1})
+
+    # Test feature importances
+    importances = ensemble.feature_importances_
+    assert len(importances) == len(feature_cols)

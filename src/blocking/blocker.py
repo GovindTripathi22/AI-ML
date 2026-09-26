@@ -67,75 +67,69 @@ def blocking_tfidf_neighbors(
     if s1_df.empty or cand_df.empty:
         return results
 
-    # Construct combined text for TF-IDF representation
-    cand_texts = (
-        cand_df["business_name_norm"].fillna("")
-        + " "
-        + cand_df["business_address_norm"].fillna("")
-    ).tolist()
-    s1_texts = (
-        s1_df["business_name_norm"].fillna("")
-        + " "
-        + s1_df["business_address_norm"].fillna("")
-    ).tolist()
+    # Pre-group candidates by normalized country for fast partition lookups
+    # to avoid computing cross-country dot products on massive datasets
+    cand_by_country: Dict[str, pd.DataFrame] = {}
+    for country_val, group in cand_df.groupby(
+        cand_df["country"].fillna("").astype(str).str.strip().str.lower()
+    ):
+        cand_by_country[country_val] = group
 
-    # Fit TF-IDF on candidate pool
-    vectorizer = TfidfVectorizer(
-        analyzer="char_wb",
-        ngram_range=(2, 4),
-        min_df=1,
-        sublinear_tf=True,
-    )
-    X_cand = vectorizer.fit_transform(cand_texts)
-    X_s1 = vectorizer.transform(s1_texts)
+    for s1_country_val, s1_group in s1_df.groupby(
+        s1_df["country"].fillna("").astype(str).str.strip().str.lower()
+    ):
+        matching_cand_dfs = [
+            cand_grp
+            for c_val, cand_grp in cand_by_country.items()
+            if _country_equal(s1_country_val, c_val)
+        ]
+        if not matching_cand_dfs:
+            continue
+        cands_partition = pd.concat(matching_cand_dfs, ignore_index=True)
+        if cands_partition.empty:
+            continue
 
-    s1_ids = s1_df["entity_id"].tolist()
-    s1_countries = s1_df["country"].tolist()
-    cand_ids = cand_df["entity_id"].values
-    cand_countries = cand_df["country"].values
+        cand_texts = (
+            cands_partition["business_name_norm"].fillna("")
+            + " "
+            + cands_partition["business_address_norm"].fillna("")
+        ).tolist()
+        s1_texts = (
+            s1_group["business_name_norm"].fillna("")
+            + " "
+            + s1_group["business_address_norm"].fillna("")
+        ).tolist()
 
-    n_s1 = len(s1_ids)
-    n_cand = len(cand_ids)
-    effective_k = min(top_k, n_cand)
+        vectorizer = TfidfVectorizer(
+            analyzer="char_wb",
+            ngram_range=(2, 4),
+            min_df=1,
+            sublinear_tf=True,
+        )
+        X_cand = vectorizer.fit_transform(cand_texts)
+        X_s1 = vectorizer.transform(s1_texts)
 
-    # Process in batches to maintain sparse memory efficiency
-    for start_idx in range(0, n_s1, batch_size):
-        end_idx = min(start_idx + batch_size, n_s1)
-        X_s1_batch = X_s1[start_idx:end_idx]
+        s1_ids = s1_group["entity_id"].tolist()
+        cand_ids = cands_partition["entity_id"].values
+        n_s1_part = len(s1_ids)
+        effective_k = min(top_k, len(cand_ids))
 
-        # Sparse dot product equals cosine similarity since TF-IDF rows are L2-normalized
-        sim_batch = X_s1_batch.dot(X_cand.T).toarray()
+        # Process queries in batches within this country partition
+        for start_idx in range(0, n_s1_part, batch_size):
+            end_idx = min(start_idx + batch_size, n_s1_part)
+            X_s1_batch = X_s1[start_idx:end_idx]
+            sim_batch = X_s1_batch.dot(X_cand.T).toarray()
 
-        for i in range(end_idx - start_idx):
-            global_s1_idx = start_idx + i
-            s1_id = s1_ids[global_s1_idx]
-            s1_country = s1_countries[global_s1_idx]
-            sim_scores = sim_batch[i]
-
-            # Filter candidates by country equality before ranking
-            country_mask = np.array(
-                [_country_equal(s1_country, cc) for cc in cand_countries],
-                dtype=bool,
-            )
-            filtered_indices = np.where(country_mask)[0]
-
-            if len(filtered_indices) == 0:
-                continue
-
-            filtered_scores = sim_scores[filtered_indices]
-            k_for_query = min(effective_k, len(filtered_indices))
-
-            # Retrieve top-k indices with highest similarity
-            if len(filtered_scores) > k_for_query:
-                top_part = np.argpartition(filtered_scores, -k_for_query)[-k_for_query:]
-                sorted_top = top_part[np.argsort(-filtered_scores[top_part])]
-                best_indices = filtered_indices[sorted_top]
-            else:
-                sorted_all = np.argsort(-filtered_scores)
-                best_indices = filtered_indices[sorted_all]
-
-            for idx in best_indices:
-                results[s1_id].add(cand_ids[idx])
+            for i in range(end_idx - start_idx):
+                s1_id = s1_ids[start_idx + i]
+                sim_scores = sim_batch[i]
+                if len(sim_scores) > effective_k:
+                    top_part = np.argpartition(sim_scores, -effective_k)[-effective_k:]
+                    sorted_top = top_part[np.argsort(-sim_scores[top_part])]
+                else:
+                    sorted_top = np.argsort(-sim_scores)
+                for idx in sorted_top:
+                    results[s1_id].add(cand_ids[idx])
 
     return results
 

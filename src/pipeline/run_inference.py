@@ -19,8 +19,9 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 import joblib
 import numpy as np
 import pandas as pd
+from rapidfuzz.distance import JaroWinkler
 
-from src.blocking.blocker import generate_candidates
+from src.blocking.blocker import _country_equal, generate_candidates
 from src.config import (
     BLOCKING_TOP_K,
     MATCH_THRESHOLD,
@@ -129,6 +130,134 @@ def write_submission_tsv(
             f.write(f"{s1_id}\t{ids_str}\n")
 
     return dest
+
+
+def apply_graph_and_relative_filtering(
+    cand_probs_df: pd.DataFrame,
+    source1_order: List[str],
+    source2_df: pd.DataFrame,
+    source3_df: pd.DataFrame,
+    candidate_pairs: Dict[str, List[str]],
+    base_threshold: float = MATCH_THRESHOLD,
+    margin_ratio: float = 0.70,
+    enable_transitive_recovery: bool = True,
+    borderline_threshold: float = 0.45,
+    transitive_sim_threshold: float = 0.85,
+) -> Dict[str, List[str]]:
+    """
+    Applies dual-stage post-processing to candidate matches:
+    1. Entity-Relative Margin Thresholding: filters candidates that score significantly
+       below the top candidate for an entity, suppressing low-confidence tail false positives.
+    2. Graph Transitive Link Recovery: if Source 1 matches Source 2 (or Source 3), checks
+       if an unmatched borderline candidate from Source 3 (or Source 2) in candidate_pairs
+       has high string similarity to the accepted match, recovering missing cross-source links.
+
+    Args:
+        cand_probs_df: DataFrame with candidate pairs and match_probability.
+        source1_order: Ordered list of all Source 1 entity IDs.
+        source2_df: Source 2 records (with normalized columns if available).
+        source3_df: Source 3 records (with normalized columns if available).
+        candidate_pairs: Mapping of source1_id -> candidate IDs.
+        base_threshold: Primary probability decision boundary.
+        margin_ratio: Fraction of max probability a candidate must satisfy (default: 0.70).
+        enable_transitive_recovery: Whether to enable graph cross-source recovery.
+        borderline_threshold: Minimum probability for candidate to be eligible for recovery.
+        transitive_sim_threshold: String similarity cutoff between S2 and S3 records.
+
+    Returns:
+        Dict mapping source1_id -> list of final accepted match IDs.
+    """
+    matching_results: Dict[str, List[str]] = {s1: [] for s1 in source1_order}
+
+    # Build fast candidate record lookup
+    cand_records: Dict[str, Dict[str, Any]] = {}
+    for _, row in source2_df.iterrows():
+        eid = str(row["entity_id"]).strip()
+        cand_records[eid] = {
+            "name": str(row.get("business_name_norm", row.get("business_name", ""))).strip(),
+            "addr": str(row.get("business_address_norm", row.get("business_address", ""))).strip(),
+            "country": row.get("country"),
+            "source": "S2",
+        }
+    for _, row in source3_df.iterrows():
+        eid = str(row["entity_id"]).strip()
+        cand_records[eid] = {
+            "name": str(row.get("business_name_norm", row.get("business_name", ""))).strip(),
+            "addr": str(row.get("business_address_norm", row.get("business_address", ""))).strip(),
+            "country": row.get("country"),
+            "source": "S3",
+        }
+
+    if cand_probs_df.empty:
+        return matching_results
+
+    grouped = cand_probs_df.groupby("source1_entity_id")
+
+    for s1_id in source1_order:
+        if s1_id not in grouped.groups:
+            continue
+
+        group = grouped.get_group(s1_id)
+        p_dict = dict(zip(group["candidate_id"].astype(str).str.strip(), group["match_probability"]))
+
+        # Step 1: Base threshold filter
+        accepted = [cid for cid, p in p_dict.items() if p >= base_threshold]
+
+        # Step 2: Relative margin filtering
+        if accepted:
+            max_p = max(p_dict[cid] for cid in accepted)
+            accepted = [cid for cid in accepted if p_dict[cid] >= margin_ratio * max_p]
+
+        # Step 3: Graph Transitive Link Recovery
+        if enable_transitive_recovery and accepted:
+            accepted_sources = {
+                cand_records[cid]["source"] for cid in accepted if cid in cand_records
+            }
+
+            # If S2 matched but S3 did not: look for S3 candidate similar to accepted S2 match
+            if "S2" in accepted_sources and "S3" not in accepted_sources:
+                s2_matches = [cid for cid in accepted if cand_records.get(cid, {}).get("source") == "S2"]
+                for s2_id in s2_matches:
+                    s2_rec = cand_records[s2_id]
+                    for cid, p in p_dict.items():
+                        if cid not in accepted and cand_records.get(cid, {}).get("source") == "S3":
+                            if p >= borderline_threshold:
+                                s3_rec = cand_records[cid]
+                                if _country_equal(s2_rec["country"], s3_rec["country"]):
+                                    n_sim = JaroWinkler.similarity(s2_rec["name"], s3_rec["name"])
+                                    a_sim = JaroWinkler.similarity(s2_rec["addr"], s3_rec["addr"])
+                                    comb_sim = 0.6 * n_sim + 0.4 * a_sim
+                                    if comb_sim >= transitive_sim_threshold:
+                                        accepted.append(cid)
+
+            # If S3 matched but S2 did not: look for S2 candidate similar to accepted S3 match
+            elif "S3" in accepted_sources and "S2" not in accepted_sources:
+                s3_matches = [cid for cid in accepted if cand_records.get(cid, {}).get("source") == "S3"]
+                for s3_id in s3_matches:
+                    s3_rec = cand_records[s3_id]
+                    for cid, p in p_dict.items():
+                        if cid not in accepted and cand_records.get(cid, {}).get("source") == "S2":
+                            if p >= borderline_threshold:
+                                s2_rec = cand_records[cid]
+                                if _country_equal(s3_rec["country"], s2_rec["country"]):
+                                    n_sim = JaroWinkler.similarity(s3_rec["name"], s2_rec["name"])
+                                    a_sim = JaroWinkler.similarity(s3_rec["addr"], s2_rec["addr"])
+                                    comb_sim = 0.6 * n_sim + 0.4 * a_sim
+                                    if comb_sim >= transitive_sim_threshold:
+                                        accepted.append(cid)
+
+        # Enforce strict candidate constraint, no duplicates, no self-matches
+        valid_cands = set(str(c).strip() for c in candidate_pairs.get(s1_id, []))
+        deduped = []
+        seen = set()
+        for cid in accepted:
+            if cid in valid_cands and cid not in seen and cid != s1_id:
+                deduped.append(cid)
+                seen.add(cid)
+
+        matching_results[s1_id] = deduped
+
+    return matching_results
 
 
 def print_inference_summary(
@@ -272,10 +401,17 @@ def run_test_inference(
         feat_df = feat_df.copy()
         feat_df["match_probability"] = probs
 
-        # Filter by threshold
-        accepted = feat_df[feat_df["match_probability"] >= t_thresh]
-        for s1, group in accepted.groupby("source1_entity_id"):
-            matching_results[s1] = group["candidate_id"].tolist()
+        # Filter by threshold, entity-relative margin, and graph transitive link recovery
+        matching_results = apply_graph_and_relative_filtering(
+            cand_probs_df=feat_df,
+            source1_order=s1_order,
+            source2_df=norm_s2,
+            source3_df=norm_s3,
+            candidate_pairs=candidate_pairs,
+            base_threshold=t_thresh,
+            margin_ratio=0.70,
+            enable_transitive_recovery=True,
+        )
 
     # 6. Correctness Checks
     print("\n[6/6] Verifying submission integrity constraints...")

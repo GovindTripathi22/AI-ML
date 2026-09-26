@@ -5,8 +5,9 @@ Provides pure Python / regex-based normalization for business names and addresse
 No external APIs or internet lookups are used.
 """
 
-from typing import Any, NamedTuple, Optional, Set, Tuple
 import re
+from typing import Any, NamedTuple, Optional, Set, Tuple
+import unicodedata
 
 # -----------------------------------------------------------------------------
 # Legal Suffix Dictionary
@@ -20,16 +21,36 @@ LEGAL_SUFFIXES = {
     "llc": "llc",
     "llp": "llp",
     "plc": "plc",
+    "se": "societas europaea",
+    "sa": "societe anonyme",
+    "sas": "societe par actions simplifiee",
+    "sarl": "societe a responsabilite limitee",
+    "gmbh": "gmbh",
+    "ag": "ag",
 }
 
 # -----------------------------------------------------------------------------
 # Address Abbreviation Dictionary
 # -----------------------------------------------------------------------------
 ADDRESS_ABBREVIATIONS = {
+    # Road and building types
     "rd": "road",
     "st": "street",
     "ave": "avenue",
     "blvd": "boulevard",
+    "bd": "boulevard",
+    "bvd": "boulevard",
+    "dr": "drive",
+    "hwy": "highway",
+    "pkwy": "parkway",
+    "pl": "place",
+    "pt": "point",
+    "ln": "lane",
+    "ct": "court",
+    "sq": "square",
+    "ctr": "center",
+    "cir": "circle",
+    "ter": "terrace",
     "apt": "apartment",
     "no": "number",
     "bldg": "building",
@@ -37,6 +58,15 @@ ADDRESS_ABBREVIATIONS = {
     "ste": "suite",
     "dist": "district",
     "nr": "near",
+    # Directional abbreviations
+    "w": "west",
+    "e": "east",
+    "n": "north",
+    "s": "south",
+    "nw": "northwest",
+    "ne": "northeast",
+    "sw": "southwest",
+    "se": "southeast",
 }
 
 # -----------------------------------------------------------------------------
@@ -106,6 +136,9 @@ def normalize_business_name(name: Any) -> str:
     s = str(name).strip().lower()
     if not s:
         return ""
+
+    # Unicode NFKD decomposition: e.g. 'Moët' -> 'Moet', 'Courbevoie' -> 'Courbevoie'
+    s = unicodedata.normalize("NFKD", s).encode("ASCII", "ignore").decode("utf-8")
 
     # Replace '&' with ' and ' before punctuation removal
     s = re.sub(r"&", " and ", s)
@@ -178,6 +211,9 @@ def normalize_address(address: Any) -> AddressNormResult:
     raw = str(address).strip().lower()
     if not raw:
         return AddressNormResult("", False, None)
+
+    # Unicode NFKD decomposition
+    raw = unicodedata.normalize("NFKD", raw).encode("ASCII", "ignore").decode("utf-8")
 
     # 1. Detect landmark presence before removal
     has_landmark = bool(LANDMARK_PATTERN.search(raw))
