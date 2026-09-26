@@ -1,0 +1,120 @@
+{
+  "timestamp": "2026-09-26 16:36:08",
+  "random_seed": 42,
+  "best_model": "lightgbm",
+  "selection_metric": "pr_auc",
+  "dataset_summary": {
+    "train_pairs": 226,
+    "train_positives": 21,
+    "train_negatives": 205,
+    "train_s1_entities": 16,
+    "val_pairs": 54,
+    "val_positives": 5,
+    "val_negatives": 49,
+    "val_s1_entities": 4,
+    "n_features": 16
+  },
+  "feature_names": [
+    "name_ratio",
+    "name_token_sort_ratio",
+    "name_token_set_ratio",
+    "name_partial_ratio",
+    "name_jaccard",
+    "name_first_word_match",
+    "name_length_diff",
+    "name_num_common_tokens",
+    "addr_ratio",
+    "addr_token_sort_ratio",
+    "addr_partial_ratio",
+    "addr_jaccard",
+    "pincode_match",
+    "has_landmark_both",
+    "same_country",
+    "combined_similarity"
+  ],
+  "models_evaluated": {
+    "lightgbm": {
+      "roc_auc": 1.0,
+      "pr_auc": 1.0,
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0,
+      "threshold": 0.5,
+      "confusion_matrix": {
+        "tn": 49,
+        "fp": 0,
+        "fn": 0,
+        "tp": 5,
+        "matrix": [
+          [
+            49,
+            0
+          ],
+          [
+            0,
+            5
+          ]
+        ]
+      },
+      "training_time_sec": 0.249,
+      "best_iteration": 426,
+      "params": {
+        "n_estimators": 500,
+        "learning_rate": 0.03,
+        "max_depth": 6,
+        "num_leaves": 31,
+        "scale_pos_weight": 9.7619
+      }
+    },
+    "logistic_regression": {
+      "roc_auc": 1.0,
+      "pr_auc": 1.0,
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0,
+      "threshold": 0.5,
+      "confusion_matrix": {
+        "tn": 49,
+        "fp": 0,
+        "fn": 0,
+        "tp": 5,
+        "matrix": [
+          [
+            49,
+            0
+          ],
+          [
+            0,
+            5
+          ]
+        ]
+      },
+      "training_time_sec": 0.014,
+      "params": {
+        "class_weight": "balanced",
+        "scaler": "StandardScaler",
+        "solver": "lbfgs"
+      }
+    }
+  },
+  "lightgbm_feature_importances_gain": {
+    "name_ratio": 0.008729380099356095,
+    "name_token_sort_ratio": 0.005772410195968979,
+    "name_token_set_ratio": 0.0027601891950320818,
+    "name_partial_ratio": 0.04410840119209329,
+    "name_jaccard": 8.404735293472186,
+    "name_first_word_match": 0.0,
+    "name_length_diff": 2.0882899576246672e-11,
+    "name_num_common_tokens": 0.0,
+    "addr_ratio": 16.18587278548438,
+    "addr_token_sort_ratio": 5188.441456742886,
+    "addr_partial_ratio": 0.2347859959829579,
+    "addr_jaccard": 2333.2186191172905,
+    "pincode_match": 0.02653699927031994,
+    "has_landmark_both": 0.0,
+    "same_country": 0.0,
+    "combined_similarity": 87.74767514107204
+  }
+}
