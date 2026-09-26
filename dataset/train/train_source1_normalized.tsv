@@ -1,0 +1,21 @@
+entity_id	business_name	business_address	country	business_name_norm	business_address_norm	has_landmark	address_pincode
+S1-00001	Tata Consultancy Services	TCS House, Raveline Street, Fort, Mumbai 400001	India	tata consultancy services	tcs house raveline street fort mumbai	False	400001
+S1-00002	Infosys Limited	Electronics City, Hosur Road, Bangalore 560100	India	infosys limited	electronics city hosur road bangalore	False	560100
+S1-00003	Reliance Industries	Maker Chambers IV, 222 Nariman Point, Mumbai 400021	India	reliance industries	maker chambers iv 222 nariman point mumbai	False	400021
+S1-00004	Wipro Technologies	Doddakannelli, Sarjapur Road, Bangalore 560035	India	wipro technologies	doddakannelli sarjapur road bangalore	False	560035
+S1-00005	Hindustan Unilever	Unilever House, B.D. Sawant Marg, Chakala, Andheri East, Mumbai 400099	India	hindustan unilever	unilever house b d sawant marg chakala andheri east mumbai	False	400099
+S1-00006	State Bank of India	State Bank Bhavan, Madame Cama Road, Nariman Point, Mumbai 400021	India	state bank of india	state bank bhavan madame cama road nariman point mumbai	False	400021
+S1-00007	Bharti Airtel	Bharti Crescent, 1 Nelson Mandela Road, Vasant Kunj, New Delhi 110070	India	bharti airtel	bharti crescent 1 nelson mandela road vasant kunj new delhi	False	110070
+S1-00008	HCL Technologies	Technology Hub, Plot No 3A, Sector 126, Noida 201304	India	hcl technologies	technology hub plot number 3a sector 126 noida	False	201304
+S1-00009	Larsen & Toubro	L&T House, Ballard Estate, Mumbai 400001	India	larsen and toubro	l t house ballard estate mumbai	False	400001
+S1-00010	Mahindra & Mahindra	Gateway Building, Apollo Bunder, Mumbai 400001	India	mahindra and mahindra	gateway building apollo bunder mumbai	False	400001
+S1-00011	Apple Inc.	One Apple Park Way, Cupertino, CA 95014	US	apple incorporated	one apple park way cupertino ca	False	95014
+S1-00012	Microsoft Corporation	One Microsoft Way, Redmond, WA 98052	US	microsoft corporation	one microsoft way redmond wa	False	98052
+S1-00013	Amazon.com Inc.	410 Terry Avenue North, Seattle, WA 98109	US	amazon com incorporated	410 terry avenue north seattle wa	False	98109
+S1-00014	Alphabet Inc.	1600 Amphitheatre Parkway, Mountain View, CA 94043	US	alphabet incorporated	1600 amphitheatre parkway mountain view ca	False	94043
+S1-00015	The Home Depot Inc.	2455 Paces Ferry Road, Atlanta, GA 30339	US	home depot incorporated	2455 paces ferry road atlanta ga	False	30339
+S1-00016	Walmart Inc.	702 SW 8th Street, Bentonville, AR 72716	US	walmart incorporated	702 sw 8th street bentonville ar	False	72716
+S1-00017	Target Corporation	1000 Nicollet Mall, Minneapolis, MN 55403	US	target corporation	1000 nicollet mall minneapolis mn	False	55403
+S1-00018	JPMorgan Chase & Co.	383 Madison Avenue, New York, NY 10179	US	jpmorgan chase and company	383 madison avenue new york ny	False	10179
+S1-00019	Johnson & Johnson	One Johnson & Johnson Plaza, New Brunswick, NJ 08933	US	johnson and johnson	one johnson johnson plaza new brunswick nj	False	08933
+S1-00020	General Electric Company	5 Necco Street, Boston, MA 02210	US	general electric company	5 necco street boston ma	False	02210

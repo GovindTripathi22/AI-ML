@@ -1,0 +1,13 @@
+entity_id	business_name	business_address	country	business_name_norm	business_address_norm	has_landmark	address_pincode
+S3-00001	TCS Pvt Ltd	TCS House, Raveline Road, Mumbai	India	tcs private limited	tcs house raveline road mumbai	False	
+S3-00002	Infosys Technologies Pvt. Ltd.	Electronics City Phase 1, Hosur Road, Bengaluru	India	infosys technologies private limited	electronics city phase 1 hosur road bengaluru	False	
+S3-00003	Wipro Enterprises Corp	Doddakannelli, Sarjapur Rd, Bengaluru	India	wipro enterprises corporation	doddakannelli sarjapur road bengaluru	False	
+S3-00004	Hindustan Unilever Co	Chakala, Next to Western Express Hwy, Andheri East, Mumbai	India	hindustan unilever company	chakala andheri east mumbai	True	
+S3-00005	State Bank of India Corp	State Bank Bhavan, Madame Cama Road, Mumbai	India	state bank of india corporation	state bank bhavan madame cama road mumbai	False	
+S3-00006	L and T Limited	L&T House, Ballard Estate, Mumbai	India	l and t limited	l t house ballard estate mumbai	False	
+S3-00007	Apple Incorporated	1 Apple Park Way, Ste 100, Cupertino, CA	US	apple incorporated	1 apple park way suite 100 cupertino ca	False	
+S3-00008	Microsoft Co	One Microsoft Way, Redmond, WA	US	microsoft company	one microsoft way redmond wa	False	
+S3-00009	Alphabet Incorporated	1600 Amphitheatre Pkwy, Bldg 43, Mountain View, CA	US	alphabet incorporated	1600 amphitheatre pkwy building 43 mountain view ca	False	
+S3-00010	Home Depot USA Inc	2455 Paces Ferry Rd, Ste B, Atlanta, GA	US	home depot usa incorporated	2455 paces ferry road suite b atlanta ga	False	
+S3-00011	JPMorgan Bank Corp	383 Madison Avenue, Fl 24, New York, NY	US	jpmorgan bank corporation	383 madison avenue floor 24 new york ny	False	
+S3-00012	Horizon Capital Management LLC	500 Boylston St, Fl 14, Boston, MA 02116	US	horizon capital management llc	500 boylston street floor 14 boston ma	False	02116

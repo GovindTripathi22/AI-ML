@@ -1,0 +1,17 @@
+entity_id	business_name	business_address	country	business_name_norm	business_address_norm	has_landmark	address_pincode
+S2-00001	Tata Consultancy Services Ltd.	Raveline St, Near CST Station, Fort, Mumbai 400001	India	tata consultancy services limited	raveline street fort mumbai	True	400001
+S2-00002	Infosys Ltd	Hosur Rd, Near Electronics City Gate 1, Bangalore 560100	India	infosys limited	hosur road bangalore	True	560100
+S2-00003	Reliance Industries Ltd.	222 Nariman Pt, Opp Vidhan Bhavan, Mumbai 400021	India	reliance industries limited	222 nariman pt mumbai	True	400021
+S2-00004	Wipro Ltd	Sarjapur Rd, Behind Kaikondrahalli Lake, Bangalore 560035	India	wipro limited	sarjapur road bangalore	True	560035
+S2-00005	SBI Bank	Madame Cama Rd, Opp Air India Bldg, Nariman Point, Mumbai 400021	India	sbi bank	madame cama road nariman point mumbai	True	400021
+S2-00006	Bharti Airtel Ltd.	1 Nelson Mandela Rd, Near Ambience Mall, Vasant Kunj, New Delhi 110070	India	bharti airtel limited	1 nelson mandela road vasant kunj new delhi	True	110070
+S2-00007	Larsen and Toubro Ltd.	Ballard Estate, Fort, Opp Port Trust, Mumbai 400001	India	larsen and toubro limited	ballard estate fort mumbai	True	400001
+S2-00008	Mahindra and Mahindra Ltd	Apollo Bunder, Colaba, Near Gateway of India, Mumbai 400001	India	mahindra and mahindra limited	apollo bunder colaba mumbai	True	400001
+S2-00009	Apple Computer Inc	1 Apple Park Way, Cupertino, CA 95014	US	apple computer incorporated	1 apple park way cupertino ca	False	95014
+S2-00010	Microsoft Corp.	1 Microsoft Way, Bldg 92, Redmond, WA 98052	US	microsoft corporation	1 microsoft way building 92 redmond wa	False	98052
+S2-00011	Amazon.com Services LLC	410 Terry Ave N, South Lake Union, Seattle, WA 98109	US	amazon com services llc	410 terry avenue n south lake union seattle wa	False	98109
+S2-00012	Home Depot Corp	2455 Paces Ferry Rd NW, Atlanta, GA 30339	US	home depot corporation	2455 paces ferry road nw atlanta ga	False	30339
+S2-00013	Wal-Mart Stores, LLC	702 Southwest 8th St, Bentonville, AR 72716	US	wal mart stores llc	702 southwest 8th street bentonville ar	False	72716
+S2-00014	JPMorgan Chase and Co	383 Madison Ave, New York, NY 10179	US	jpmorgan chase and company	383 madison avenue new york ny	False	10179
+S2-00015	Johnson and Johnson Services Inc	1 Johnson and Johnson Plz, New Brunswick, NJ 08933	US	johnson and johnson services incorporated	1 johnson and johnson plz new brunswick nj	False	08933
+S2-00016	Apex Logistics Private Limited	Plot 99, GIDC Estate, Vatva, Ahmedabad 382445	India	apex logistics private limited	plot 99 gidc estate vatva ahmedabad	False	382445
