@@ -1,0 +1,190 @@
+"""
+Unit tests for Threshold Tuning and Inference Pipeline.
+
+Validates:
+- Exact competition F_0.5 scoring implementation (singletons, precision emphasis)
+- Macro-averaged F_0.5 computation across all entities
+- Submission file validation constraints
+- Submission TSV file formatting
+- Open-vocabulary country handling
+"""
+
+import ast
+from pathlib import Path
+import tempfile
+import numpy as np
+import pandas as pd
+import pytest
+
+from src.models.threshold_tuning import (
+    compute_f0_5_per_entity,
+    compute_precision_recall_per_entity,
+    macro_average_f0_5,
+    macro_average_metrics,
+)
+from src.pipeline.run_inference import (
+    validate_inference_outputs,
+    write_submission_tsv,
+)
+
+
+def test_f0_5_singleton_cases():
+    """Verify official competition scoring rules for singletons."""
+    # 1. Singleton correctly predicted (both empty) -> 1.0
+    assert compute_f0_5_per_entity([], []) == 1.0
+    assert compute_f0_5_per_entity(None, None) == 1.0
+
+    # 2. Singleton incorrectly predicted (true empty, predicted non-empty) -> 0.0
+    assert compute_f0_5_per_entity(["S2-001"], []) == 0.0
+    assert compute_f0_5_per_entity(["S2-001", "S3-002"], None) == 0.0
+
+    # 3. True match exists but model predicted empty -> 0.0
+    assert compute_f0_5_per_entity([], ["S2-001"]) == 0.0
+    assert compute_f0_5_per_entity(None, ["S2-001", "S3-001"]) == 0.0
+
+
+def test_f0_5_precision_weighting():
+    """Verify F_0.5 heavily penalizes precision drop compared to recall drop."""
+    # Perfect match -> 1.0
+    assert np.isclose(compute_f0_5_per_entity(["A", "B"], ["A", "B"]), 1.0)
+
+    # Partial match: Recall drop (P=1.0, R=0.5)
+    # F_0.5 = (1.25 * 1.0 * 0.5) / (0.25 * 1.0 + 0.5) = 0.625 / 0.75 = 0.8333
+    score_recall_drop = compute_f0_5_per_entity(["A"], ["A", "B"])
+    assert np.isclose(score_recall_drop, 5 / 6, atol=1e-4)
+
+    # Extra false positive: Precision drop (P=0.5, R=1.0)
+    # F_0.5 = (1.25 * 0.5 * 1.0) / (0.25 * 0.5 + 1.0) = 0.625 / 1.125 = 0.5556
+    score_precision_drop = compute_f0_5_per_entity(["A", "B"], ["A"])
+    assert np.isclose(score_precision_drop, 5 / 9, atol=1e-4)
+
+    # F_0.5 must be significantly higher when precision is preserved
+    assert score_recall_drop > score_precision_drop
+    assert np.isclose(score_recall_drop - score_precision_drop, (5 / 6) - (5 / 9))
+
+
+def test_macro_average_f0_5():
+    """Verify macro-average across multiple entities including singletons."""
+    ground_truth = {
+        "S1-001": ["S2-001", "S3-001"],
+        "S1-002": ["S2-002"],
+        "S1-003": [],  # Singleton
+    }
+
+    # Case A: Perfect predictions on all
+    predictions_perfect = {
+        "S1-001": ["S2-001", "S3-001"],
+        "S1-002": ["S2-002"],
+        "S1-003": [],
+    }
+    assert np.isclose(macro_average_f0_5(predictions_perfect, ground_truth), 1.0)
+
+    # Case B: Missed singleton
+    predictions_imperfect = {
+        "S1-001": ["S2-001", "S3-001"],  # 1.0
+        "S1-002": ["S2-002"],            # 1.0
+        "S1-003": ["S2-999"],            # 0.0 (false positive on singleton)
+    }
+    expected = (1.0 + 1.0 + 0.0) / 3.0
+    assert np.isclose(macro_average_f0_5(predictions_imperfect, ground_truth), expected)
+
+    metrics = macro_average_metrics(predictions_imperfect, ground_truth)
+    assert np.isclose(metrics["f0_5"], expected)
+
+
+def test_validate_inference_outputs_pass():
+    """Verify validation passes for valid output structures."""
+    s1_df = pd.DataFrame({"entity_id": ["S1-01", "S1-02"]})
+    s2_df = pd.DataFrame({"entity_id": ["S2-01"]})
+    s3_df = pd.DataFrame({"entity_id": ["S3-01"]})
+
+    candidates = {
+        "S1-01": ["S2-01", "S3-01"],
+        "S1-02": ["S2-01"],
+    }
+    matching = {
+        "S1-01": ["S2-01"],
+        "S1-02": [],
+    }
+
+    # Should execute without error
+    validate_inference_outputs(s1_df, s2_df, s3_df, candidates, matching)
+
+
+def test_validate_inference_outputs_failures():
+    """Verify validation catches all critical integrity failures."""
+    s1_df = pd.DataFrame({"entity_id": ["S1-01", "S1-02"]})
+    s2_df = pd.DataFrame({"entity_id": ["S2-01"]})
+    s3_df = pd.DataFrame({"entity_id": ["S3-01"]})
+
+    # 1. Missing entity in matching results
+    with pytest.raises(ValueError, match="Coverage mismatch"):
+        validate_inference_outputs(s1_df, s2_df, s3_df, {"S1-01": ["S2-01"]}, {"S1-01": ["S2-01"]})
+
+    # 2. Duplicate match IDs
+    with pytest.raises(ValueError, match="Duplicate match IDs"):
+        validate_inference_outputs(
+            s1_df, s2_df, s3_df,
+            {"S1-01": ["S2-01"], "S1-02": []},
+            {"S1-01": ["S2-01", "S2-01"], "S1-02": []}
+        )
+
+    # 3. Self match
+    with pytest.raises(ValueError, match="Self-match detected"):
+        validate_inference_outputs(
+            s1_df, s2_df, s3_df,
+            {"S1-01": ["S1-01"], "S1-02": []},
+            {"S1-01": ["S1-01"], "S1-02": []}
+        )
+
+    # 4. Out of target pool ID
+    with pytest.raises(ValueError, match="Invalid candidate IDs"):
+        validate_inference_outputs(
+            s1_df, s2_df, s3_df,
+            {"S1-01": ["UNKNOWN-ID"], "S1-02": []},
+            {"S1-01": ["UNKNOWN-ID"], "S1-02": []}
+        )
+
+    # 5. Matching ID not in candidate pairs
+    with pytest.raises(ValueError, match="Candidate constraint violation"):
+        validate_inference_outputs(
+            s1_df, s2_df, s3_df,
+            {"S1-01": ["S2-01"], "S1-02": []},
+            {"S1-01": ["S3-01"], "S1-02": []}
+        )
+
+
+def test_write_submission_tsv_format():
+    """Verify TSV generation produces tab separation and unquoted lists."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        dest = Path(tmp_dir) / "test_out.tsv"
+        data = {
+            "S1-01": ["S2-01", "S3-02"],
+            "S1-02": [],
+        }
+        order = ["S1-01", "S1-02"]
+
+        write_submission_tsv(data, order, "matched_entity_ids", dest)
+
+        lines = dest.read_text(encoding="utf-8").splitlines()
+        assert len(lines) == 3
+        assert lines[0] == "source1_entity_id\tmatched_entity_ids"
+        assert lines[1] == "S1-01\tS2-01,S3-02"
+        assert lines[2] == "S1-02\t"
+
+
+def test_no_hardcoded_country_strings_in_pipeline():
+    """Ensure no hardcoded country check literals exist in filtering logic."""
+    root_src = Path(__file__).resolve().parent.parent / "src"
+    disallowed = {"US", "India", "France"}
+
+    for py_file in root_src.glob("**/*.py"):
+        # Skip docstrings and comments by parsing AST string constants in filtering functions
+        tree = ast.parse(py_file.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Compare):
+                for comparator in node.comparators:
+                    if isinstance(comparator, ast.Constant) and isinstance(comparator.value, str):
+                        assert comparator.value not in disallowed, (
+                            f"Hardcoded country literal '{comparator.value}' found in comparison at {py_file}"
+                        )

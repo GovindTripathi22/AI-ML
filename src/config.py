@@ -10,7 +10,7 @@ from pathlib import Path
 # Configurable Constants
 # ---------------------------------------------------------
 BLOCKING_TOP_K = 15
-MATCH_THRESHOLD = 0.6
+MATCH_THRESHOLD = 0.7
 RANDOM_SEED = 42
 USE_EMBEDDINGS = False
 
