@@ -1,0 +1,21 @@
+# Business Entity Resolution Pipeline Dependencies
+# Pinned versions (MIT / Apache / Permissive BSD-3-Clause licensed)
+
+# Data Processing & Storage
+numpy==1.26.4
+pandas==2.2.2
+pyarrow==16.1.0
+
+# Machine Learning & Modeling
+scikit-learn==1.5.0
+lightgbm==4.3.0
+
+# String Matching & Phonetic Algorithms
+rapidfuzz==3.9.3
+jellyfish==1.0.3
+
+# Semantic Embeddings
+sentence-transformers==3.0.1
+
+# Utilities
+tqdm==4.66.4
