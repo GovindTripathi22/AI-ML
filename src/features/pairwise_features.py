@@ -13,15 +13,77 @@ Computes multi-attribute similarity features between candidate pairs (Source 1 <
 import os
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
+import re
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
+import jellyfish
 import numpy as np
 import pandas as pd
 from rapidfuzz import fuzz
 from tqdm import tqdm
 
-
 from src.config import USE_EMBEDDINGS
 from src.utils.text_normalize import extract_tokens, normalize_dataframe
+
+STOPWORDS_ACRONYM = {
+    "inc", "ltd", "pvt", "limited", "corp", "corporation", "co", "llc",
+    "and", "the", "of", "for", "in", "to", "a", "&", "services", "technologies"
+}
+
+
+def compute_acronym_match(name1: str, name2: str) -> float:
+    """
+    Check if one business name is an acronym / initialism of the other.
+    E.g. TCS <-> Tata Consultancy Services, SBI <-> State Bank of India.
+    """
+    def _extract_acronym(text: str) -> str:
+        words = [w for w in re.findall(r"[a-zA-Z]+", text) if w.lower() not in STOPWORDS_ACRONYM]
+        return "".join(w[0].upper() for w in words) if words else ""
+
+    w1 = [w.upper() for w in re.findall(r"[a-zA-Z0-9]+", name1) if w.lower() not in STOPWORDS_ACRONYM]
+    w2 = [w.upper() for w in re.findall(r"[a-zA-Z0-9]+", name2) if w.lower() not in STOPWORDS_ACRONYM]
+    acr1 = _extract_acronym(name1)
+    acr2 = _extract_acronym(name2)
+    joined1 = "".join(w1)
+    joined2 = "".join(w2)
+
+    if acr2 and len(acr2) >= 2 and (any(tok == acr2 for tok in w1 if len(tok) >= 2) or joined1 == acr2):
+        return 1.0
+    if acr1 and len(acr1) >= 2 and (any(tok == acr1 for tok in w2 if len(tok) >= 2) or joined2 == acr1):
+        return 1.0
+    return 0.0
+
+
+def compute_addr_numeric_similarity(addr1: str, addr2: str) -> float:
+    """
+    Compute Jaccard similarity of street / building numbers (excluding 5 or 6 digit pincodes).
+    Returns 0.5 (neutral) if either address lacks numbers.
+    """
+    def _get_numbers(addr: str) -> Set[str]:
+        return {num for num in re.findall(r"\b\d+\b", addr) if len(num) not in (5, 6)}
+
+    nums1 = _get_numbers(addr1)
+    nums2 = _get_numbers(addr2)
+    if not nums1 and not nums2:
+        return 0.5
+    if not nums1 or not nums2:
+        return 0.5
+    intersection = nums1 & nums2
+    union = nums1 | nums2
+    return float(len(intersection) / len(union)) if union else 0.5
+
+
+def compute_phonetic_similarity(name1: str, name2: str) -> float:
+    """
+    Compute Levenshtein similarity on Metaphone phonetic representations.
+    Handles transliterations and alternate spelling variations.
+    """
+    toks1 = [jellyfish.metaphone(w) for w in re.findall(r"[a-zA-Z]+", name1) if w.lower() not in STOPWORDS_ACRONYM]
+    toks2 = [jellyfish.metaphone(w) for w in re.findall(r"[a-zA-Z]+", name2) if w.lower() not in STOPWORDS_ACRONYM]
+    if not toks1 or not toks2:
+        return 0.0
+    s1 = " ".join(toks1)
+    s2 = " ".join(toks2)
+    return float(fuzz.ratio(s1, s2))
 
 
 def _safe_str(val: Any) -> str:
@@ -125,6 +187,13 @@ def compute_pair_features(
     # Composite weighted similarity (0-100 scale)
     combined_similarity = 0.6 * name_token_set_ratio + 0.4 * addr_token_sort_ratio
 
+    # -------------------------------------------------------------
+    # 4. Targeted Features (Phonetic, Numeric Address, Acronyms)
+    # -------------------------------------------------------------
+    name_phonetic_sim = compute_phonetic_similarity(name1, name2)
+    addr_numeric_similarity = compute_addr_numeric_similarity(addr1, addr2)
+    name_acronym_match = compute_acronym_match(name1, name2)
+
     features: Dict[str, Any] = {
         "name_ratio": name_ratio,
         "name_token_sort_ratio": name_token_sort_ratio,
@@ -142,6 +211,9 @@ def compute_pair_features(
         "has_landmark_both": has_landmark_both,
         "same_country": same_country,
         "combined_similarity": combined_similarity,
+        "name_phonetic_sim": name_phonetic_sim,
+        "addr_numeric_similarity": addr_numeric_similarity,
+        "name_acronym_match": name_acronym_match,
     }
 
     # Optional semantic embedding cosine similarity

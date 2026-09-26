@@ -188,3 +188,20 @@ def test_no_hardcoded_country_strings_in_pipeline():
                         assert comparator.value not in disallowed, (
                             f"Hardcoded country literal '{comparator.value}' found in comparison at {py_file}"
                         )
+
+
+def test_build_submission_zip_contents():
+    """Verify build_submission_zip creates expected archive structure."""
+    from scripts.build_submission_zip import build_submission_zip
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        zip_path = build_submission_zip(team_name="TestTeam", output_dir=Path(tmp_dir))
+        assert zip_path.is_file()
+        import zipfile
+        with zipfile.ZipFile(zip_path, "r") as z:
+            names = z.namelist()
+            assert "output/matching_results.tsv" in names
+            assert "output/candidate_pairs.tsv" in names
+            assert "code/business_entity_resolution/README.md" in names
+            assert "code/business_entity_resolution/requirements.txt" in names
+            assert "Documentation_template.md" in names
+            assert any(n.startswith("code/business_entity_resolution/src/") for n in names)

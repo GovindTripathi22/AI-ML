@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-09-26 16:36:08",
+  "timestamp": "2026-09-26 16:48:58",
   "random_seed": 42,
   "best_model": "lightgbm",
   "selection_metric": "pr_auc",
@@ -12,7 +12,7 @@
     "val_positives": 5,
     "val_negatives": 49,
     "val_s1_entities": 4,
-    "n_features": 16
+    "n_features": 19
   },
   "feature_names": [
     "name_ratio",
@@ -30,7 +30,10 @@
     "pincode_match",
     "has_landmark_both",
     "same_country",
-    "combined_similarity"
+    "combined_similarity",
+    "name_phonetic_sim",
+    "addr_numeric_similarity",
+    "name_acronym_match"
   ],
   "models_evaluated": {
     "lightgbm": {
@@ -57,8 +60,8 @@
           ]
         ]
       },
-      "training_time_sec": 0.249,
-      "best_iteration": 426,
+      "training_time_sec": 0.649,
+      "best_iteration": 416,
       "params": {
         "n_estimators": 500,
         "learning_rate": 0.03,
@@ -91,7 +94,7 @@
           ]
         ]
       },
-      "training_time_sec": 0.014,
+      "training_time_sec": 0.051,
       "params": {
         "class_weight": "balanced",
         "scaler": "StandardScaler",
@@ -100,21 +103,24 @@
     }
   },
   "lightgbm_feature_importances_gain": {
-    "name_ratio": 0.008729380099356095,
-    "name_token_sort_ratio": 0.005772410195968979,
-    "name_token_set_ratio": 0.0027601891950320818,
-    "name_partial_ratio": 0.04410840119209329,
-    "name_jaccard": 8.404735293472186,
+    "name_ratio": 0.003650664468876128,
+    "name_token_sort_ratio": 0.0005031717804329255,
+    "name_token_set_ratio": 6.845170010114121,
+    "name_partial_ratio": 3.62366700330522e-14,
+    "name_jaccard": 19.297101644799216,
     "name_first_word_match": 0.0,
-    "name_length_diff": 2.0882899576246672e-11,
-    "name_num_common_tokens": 0.0,
-    "addr_ratio": 16.18587278548438,
-    "addr_token_sort_ratio": 5188.441456742886,
-    "addr_partial_ratio": 0.2347859959829579,
-    "addr_jaccard": 2333.2186191172905,
-    "pincode_match": 0.02653699927031994,
+    "name_length_diff": 5.377646787354073e-17,
+    "name_num_common_tokens": 0.0032592100324109197,
+    "addr_ratio": 0.7253988138474134,
+    "addr_token_sort_ratio": 5162.11560144745,
+    "addr_partial_ratio": 0.19530024057201126,
+    "addr_jaccard": 2292.398033217251,
+    "pincode_match": 0.02653690055012703,
     "has_landmark_both": 0.0,
     "same_country": 0.0,
-    "combined_similarity": 87.74767514107204
+    "combined_similarity": 30.691029774854407,
+    "name_phonetic_sim": 111.20233291800855,
+    "addr_numeric_similarity": 0.0,
+    "name_acronym_match": 0.0
   }
 }
