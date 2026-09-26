@@ -12,10 +12,12 @@ from pathlib import Path
 BLOCKING_TOP_K = 15
 MATCH_THRESHOLD = 0.6
 RANDOM_SEED = 42
+USE_EMBEDDINGS = False
 
 TRAIN_DIR = "dataset/train"
 TEST_DIR = "dataset/test"
 OUTPUT_DIR = "output"
+
 
 # ---------------------------------------------------------
 # Resolved Path References
