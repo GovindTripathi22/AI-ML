@@ -396,6 +396,7 @@ def main():
     parser = argparse.ArgumentParser(description="Generate official challenge test submission.")
     parser.add_argument("--limit", type=int, default=None, help="Limit number of S1 entities to process (for quick test)")
     parser.add_argument("--skip-indexing", action="store_true", help="Skip FTS index creation if DB already exists")
+    parser.add_argument("--keep-index", action="store_true", help="Keep the FTS index on disk after completion")
     parser.add_argument("--threads", type=int, default=6, help="Number of worker threads")
     parser.add_argument("--batch-size", type=int, default=3000, help="Batch size for S1 streaming")
     parser.add_argument("--threshold", type=float, default=0.90, help="Decision threshold for match acceptance (optimal 0.90)")
