@@ -60,43 +60,37 @@ VALID_COUNTRIES = {"France", "India", "US"}
 
 
 def make_query_dual(name: str, addr: str) -> str:
-    """Build dual distinctive name + address FTS query for high-recall BM25 retrieval."""
+    """Build fast and precise distinctive query for high-speed BM25 retrieval without slow OR scans."""
     n_words = re.findall(r"[^\W_]+", name or "", re.UNICODE)
     dist_name = [w.replace('"', '').replace("'", '') for w in n_words if len(w) >= 3 and w.lower() not in GENERIC_TERMS]
     if not dist_name:
         dist_name = [w.replace('"', '').replace("'", '') for w in n_words if len(w) >= 2 and w.lower() not in GENERIC_TERMS]
     
-    # Selective numbers: 3+ digits (street numbers, building numbers, zip codes) to avoid slow 1-2 digit scans
+    # Priority 1: If 2 distinctive name words, use phrase AND (instant & exact match)
+    if len(dist_name) >= 2:
+        return f'"{dist_name[0]}" "{dist_name[1]}"'
+    
+    # Priority 2: If 1 distinctive name word, combine with address number if available
     nums = [n for n in re.findall(r"\b\d+\b", addr or "") if len(n) >= 3]
+    if dist_name and nums:
+        return f'"{dist_name[0]}" "{nums[0]}"'
+    elif dist_name:
+        return f'"{dist_name[0]}"'
+    
+    # Priority 3: Address-only distinctive words for DBAs / trade names
     a_words = re.findall(r"[^\W_]+", addr or "", re.UNICODE)
     dist_addr = [w.replace('"', '').replace("'", '') for w in a_words if len(w) >= 4 and w.lower() not in GENERIC_TERMS]
+    if len(dist_addr) >= 2:
+        return f'"{dist_addr[0]}" "{dist_addr[1]}"'
+    elif dist_addr and nums:
+        return f'"{dist_addr[0]}" "{nums[0]}"'
+    elif dist_addr:
+        return f'"{dist_addr[0]}"'
     
-    terms = []
-    seen = set()
-    for w in dist_name[:2]:
-        tok = f'{w}*'
-        if tok.lower() not in seen:
-            terms.append(tok)
-            seen.add(tok.lower())
-    for n in nums[:1]:
-        tok = f'"{n}"'
-        if tok.lower() not in seen:
-            terms.append(tok)
-            seen.add(tok.lower())
-    for a in dist_addr[:1]:
-        tok = f'"{a}"'
-        if tok.lower() not in seen:
-            terms.append(tok)
-            seen.add(tok.lower())
-        
-    if not terms:
-        all_w = [w for w in n_words + a_words if len(w) >= 3 and w.lower() not in GENERIC_TERMS]
-        if all_w:
-            terms.append(f'{all_w[0]}*')
-            
-    if not terms:
-        return ""
-    return " OR ".join(terms[:4])
+    all_w = [w for w in n_words + a_words if len(w) >= 3 and w.lower() not in GENERIC_TERMS]
+    if all_w:
+        return f'"{all_w[0]}"'
+    return ""
 
 
 make_query = make_query_dual
@@ -201,7 +195,7 @@ def generate_submission(
             conn = sqlite3.connect(db_uri, uri=True)
             conn.execute("PRAGMA query_only = ON;")
             conn.execute("PRAGMA mmap_size = 2147483648;")  # 2 GB memory-mapped I/O
-            conn.execute("PRAGMA cache_size = -64000;")     # 64 MB page cache
+            conn.execute("PRAGMA cache_size = -8000;")      # 8 MB page cache per thread
             conn.execute("PRAGMA temp_store = MEMORY;")
             thread_local.conn = conn
             thread_local.cur = conn.cursor()
@@ -365,7 +359,7 @@ def generate_submission(
 
             # Logging
             now = time.time()
-            if now - last_log_time >= 15.0 or processed_count == total_s1:
+            if now - last_log_time >= 5.0 or processed_count == total_s1:
                 elapsed = now - t_start
                 rate = processed_count / elapsed if elapsed > 0 else 0
                 pct = (processed_count / total_s1) * 100
@@ -399,8 +393,8 @@ def main():
     parser.add_argument("--limit", type=int, default=None, help="Limit number of S1 entities to process (for quick test)")
     parser.add_argument("--skip-indexing", action="store_true", help="Skip FTS index creation if DB already exists")
     parser.add_argument("--keep-index", action="store_true", help="Keep the FTS index on disk after completion")
-    parser.add_argument("--threads", type=int, default=6, help="Number of worker threads")
-    parser.add_argument("--batch-size", type=int, default=3000, help="Batch size for S1 streaming")
+    parser.add_argument("--threads", type=int, default=4, help="Number of worker threads")
+    parser.add_argument("--batch-size", type=int, default=1000, help="Batch size for S1 streaming")
     parser.add_argument("--threshold", type=float, default=0.90, help="Decision threshold for match acceptance (optimal 0.90)")
     parser.add_argument("--margin-ratio", type=float, default=0.80, help="Entity-relative candidate margin ratio (optimal 0.80)")
     parser.add_argument("--db-path", type=str, default=None, help="Custom path for SQLite FTS index (e.g. /dev/shm/test_fts_index.db for RAM disk)")
