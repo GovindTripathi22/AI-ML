@@ -117,10 +117,18 @@ def build_submission_zip(
         unzipped_candidate = temp_path / "output" / "candidate_pairs.tsv"
         if test_dir is None:
             official_test = PROJECT_ROOT / "dataset_official" / "test"
-            if official_test.is_dir() and unzipped_matching.stat().st_size > 100000:
+            sample_test = PROJECT_ROOT / "dataset" / "test"
+            # Read first data row to determine whether this is official test or sample test
+            with open(unzipped_matching, "r", encoding="utf-8") as f:
+                _ = f.readline()  # header
+                first_data_line = f.readline()
+            first_id = first_data_line.split("\t")[0].strip() if first_data_line else ""
+            if first_id.startswith("S1-T"):
+                val_test_dir = sample_test
+            elif official_test.is_dir():
                 val_test_dir = official_test
             else:
-                val_test_dir = PROJECT_ROOT / "dataset" / "test"
+                val_test_dir = sample_test
         else:
             val_test_dir = test_dir
 
