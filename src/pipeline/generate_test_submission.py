@@ -200,7 +200,9 @@ def generate_submission(
         if not hasattr(thread_local, "conn"):
             conn = sqlite3.connect(db_uri, uri=True)
             conn.execute("PRAGMA query_only = ON;")
-            conn.execute("PRAGMA cache_size = -32000;")  # 32 MB page cache per thread
+            conn.execute("PRAGMA mmap_size = 2147483648;")  # 2 GB memory-mapped I/O
+            conn.execute("PRAGMA cache_size = -64000;")     # 64 MB page cache
+            conn.execute("PRAGMA temp_store = MEMORY;")
             thread_local.conn = conn
             thread_local.cur = conn.cursor()
         return thread_local.cur
