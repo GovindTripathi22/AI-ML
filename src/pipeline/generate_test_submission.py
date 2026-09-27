@@ -126,14 +126,16 @@ def score_match(s1_name, s1_addr, c_name, c_addr):
     return 0.0
 
 
-def build_fts_indices(db_path: Path) -> None:
+def build_fts_indices(db_path: Path, test_data_dir: Path = None) -> None:
     """Build country-partitioned SQLite FTS5 indices for Source 2 and Source 3."""
     if db_path.exists():
         db_path.unlink()
 
+    src_dir = test_data_dir if test_data_dir else TEST_DATA_DIR
     print("=" * 70)
     print("STEP 1: Indexing Test Source 2 & Source 3 into Country-Partitioned FTS5")
     print(f"Target SQLite database: {db_path}")
+    print(f"Reading candidates from: {src_dir}")
     print("=" * 70)
 
     conn = sqlite3.connect(str(db_path))
@@ -156,8 +158,8 @@ def build_fts_indices(db_path: Path) -> None:
     total_indexed = 0
 
     for src_file in ["test_source2.tsv", "test_source3.tsv"]:
-        fpath = TEST_DATA_DIR / src_file
-        print(f"Indexing {src_file}...")
+        fpath = src_dir / src_file
+        print(f"Indexing {src_file} from {fpath}...")
         
         reader = pl.read_csv_batched(str(fpath), separator="\t", batch_size=500000)
         file_count = 0
@@ -236,13 +238,17 @@ def generate_submission(
     db_path: Path,
     out_matching: Path,
     out_candidate: Path,
+    test_dir: Path = None,
     batch_size: int = 14000,
     num_threads: int = None,
+    top_k: int = 8,
     limit: int = None
 ) -> None:
+    src_dir = test_dir if test_dir else TEST_DATA_DIR
     print("=" * 70)
     print("STEP 2: Streaming Inference on Test Source 1")
     print(f"Target FTS DB: {db_path}")
+    print(f"Reading Source 1 from: {src_dir}")
     print("=" * 70)
 
     db_uri = f"file:{db_path.resolve().as_posix()}?mode=ro"
@@ -256,7 +262,7 @@ def generate_submission(
     f_match.write("source1_entity_id\tmatched_entity_ids\n")
     f_cand.write("source1_entity_id\tcandidate_entity_ids\n")
 
-    s1_file = TEST_DATA_DIR / "test_source1.tsv"
+    s1_file = src_dir / "test_source1.tsv"
     reader = pl.read_csv_batched(str(s1_file), separator="\t", batch_size=batch_size)
 
     total_s1 = limit if limit else 1732544
@@ -329,6 +335,8 @@ def generate_submission(
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="Generate official challenge test submission.")
+    parser.add_argument("--test-dir", type=str, default=None, help="Directory containing test_source1.tsv, test_source2.tsv, test_source3.tsv")
+    parser.add_argument("--top-k", type=int, default=8, help="Number of candidates to retrieve per entity")
     parser.add_argument("--limit", type=int, default=None, help="Limit number of S1 entities to process")
     parser.add_argument("--skip-indexing", action="store_true", help="Skip FTS index creation if DB already exists")
     parser.add_argument("--keep-index", action="store_true", help="Keep the FTS index on disk after completion")
@@ -339,6 +347,7 @@ def main():
     parser.add_argument("--db-path", type=str, default=None, help="Path for SQLite FTS index")
     args = parser.parse_args()
 
+    test_data_dir = Path(args.test_dir) if args.test_dir else TEST_DATA_DIR
     db_file = Path(args.db_path) if args.db_path else (OUTPUT_PATH / "test_fts_index.db")
     matching_tsv = OUTPUT_PATH / "matching_results.tsv"
     candidate_tsv = OUTPUT_PATH / "candidate_pairs.tsv"
@@ -347,15 +356,17 @@ def main():
     if (args.skip_indexing or args.keep_index) and db_file.exists():
         print(f"Reusing existing index at {db_file}")
     else:
-        build_fts_indices(db_file)
+        build_fts_indices(db_file, test_data_dir)
 
     # Step 2: Stream inference on Source 1
     generate_submission(
         db_path=db_file,
+        test_dir=test_data_dir,
         out_matching=matching_tsv,
         out_candidate=candidate_tsv,
         batch_size=args.batch_size,
         num_threads=args.threads,
+        top_k=args.top_k,
         limit=args.limit
     )
 
